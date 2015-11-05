@@ -4,7 +4,7 @@ build_dir = build
 # install dir location, do not change the var name
 install_dir = install
 
-# Do not change the following target name
+# Do not change the following target var name
 ch_proc_ver = ch libch-pf.so libch-notify.so
 ch_lib_ver = libch.so libch-pf.so
 gvd_proc_ver = ch_gvd gvd_proc
