@@ -703,7 +703,7 @@ install:
         result = """
 .PHONY: clean
 clean:
-\t-rm -rf $(build_dir)/*
+\t-rm -rf $(build_dir)
 """
         return result
 
