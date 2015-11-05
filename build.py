@@ -11,7 +11,7 @@ class ContentVar(object):
         self.var_idx = var_idx
         self.var_name = self.parse_name(token_list[0])
         self.var_values = self.parse_values(token_list[1])
-        self.var_is_target = False
+        self.var_visible = True
 
     def parse_name(self, token):
         token = token.lstrip(" ")
@@ -32,8 +32,8 @@ class ContentVar(object):
                 values_new.append(value)
         return values_new
     
-    def set_target(self, is_target):
-        self.var_is_target = is_target
+    def set_invisible(self):
+        self.var_visible = False
 
     def get_values(self):
         return self.var_values
@@ -61,7 +61,7 @@ class ContentVar(object):
             return value
 
     def make_def_str(self):
-        if self.var_is_target:
+        if self.var_visible == False:
             return ""
 
         tag = "%s = "%self.var_name
@@ -156,7 +156,11 @@ class BuildTarget(object):
 
     def set_var(self, var):
         self.target_var = var
-        self.target_var.set_target(True)
+        self.target_var.set_invisible()
+
+    def set_file_list(self, file_list):
+        self.file_list = file_list
+        self.file_list.sort()
 
     def dump(self):
         print self.target_name
@@ -170,13 +174,36 @@ class BuildTarget(object):
 
         result = ""
         result += tag
-        result += self.target_var.make_value_def(left_margin)
+        result += self.make_target_dep(left_margin)
+        result += self.make_target_rule()
+
+        return result
+
+    def make_target_dep(self, left_margin):
+        if self.target_type == self.TARGET_TYPE_BIN:
+            suffix = ".o"
+        else:
+            suffix = ".po"
+
+        i = 0
+        result = ""
+        for one_file in self.file_list:
+            if i != 0:
+                result += (" \\\n" + " "*left_margin)
+            # -2 for trailing .c
+            file_name = "$(build_dir)/" + one_file[:-2] + suffix
+            result += file_name
+            i += 1
+
+        return result
+
+    def make_target_rule(self):
+        result = ""
         if self.target_type == self.TARGET_TYPE_BIN:
             result += "\n\t$(CC) -o $@ $^ $(%s)\n"%self.ldso_name
         else:
             result += "\n\t$(CC) -shared -fPIC -o $@ $^\n"
-        result += "\t@echo \"\\n=====Generated $@=====\\n\"\n"
-
+        result += "\t@echo -e \"\\nGenerated $@\\n\"\n"
         return result
 
 class ContentTarget(object):
@@ -223,6 +250,17 @@ class ContentTarget(object):
         result += "\n\n"
         return result
 
+    def make_target_str(self):
+        result = ""
+
+        i = 0
+        for build_target in self.build_targets:
+            if i != 0:
+                result += " "
+            result += build_target.make_target_str()
+            i += 1
+
+        return result
 
     def make_target_def(self):
         result = ""
@@ -233,9 +271,9 @@ class ContentTarget(object):
         return result
 
 class ContentDir(object):
-    def __init__(self, content_target, var_list, include_name, cflag_name):
-        self.include_name = include_name
-        self.cflag_name = cflag_name
+    def __init__(self, content_target, var_list, include_var, cflag_var):
+        self.include_var = include_var
+        self.cflag_var = cflag_var
         self.build_dirs = {}
         build_targets = content_target.get_build_targets()
         for build_target in build_targets:
@@ -251,6 +289,8 @@ class ContentDir(object):
 
         for one_file in file_list:
             self.add_build_dir(one_file)
+
+        build_target.set_file_list(file_list)
 
     def add_build_dir(self, one_file):
         dir_name, file_name = self.get_dir_name(one_file)
@@ -270,7 +310,8 @@ class ContentDir(object):
             raise Exception("Var ref loop found, " + "->".join(var_stack))
 
         var_stack.append(var_name)
-        var = self.find_var(var_name, var_list)
+        var = self.find_target_var(var_name, var_list)
+        var.set_invisible()
 
         for value in var.var_values:
             if value.startswith("$") == False:
@@ -286,7 +327,7 @@ class ContentDir(object):
         var_stack.pop()
         return var
 
-    def find_var(self, var_name, var_list):
+    def find_target_var(self, var_name, var_list):
         for var in var_list:
             if var.var_name == var_name:
                 return var
@@ -331,13 +372,17 @@ class ContentDir(object):
         return result
 
     def make_obj_rule(self):
-        cc = "\t$(CC) -o $@ $({}) $({}) -c $(filter %c,$^)\n"
+        cc_non_pic = "\t$(CC) -o $@ $({}) $({}) -c $(filter %c,$^)\n"
+        cc_pic = "\t$(CC) -fPIC -o $@ $({}) $({}) -c $(filter %c,$^)\n"
         echo = "\t@echo\n\n"
         result = ""
         dir_list = self.get_build_dir_list()
         for dir_name in dir_list:
             result += "$(build_dir)/%s/%%.o: %s/%%.c\n"%(dir_name, dir_name)
-            result += cc.format(self.cflag_name, self.include_name)
+            result += cc_non_pic.format(self.cflag_var, self.include_var)
+            result += echo
+            result += "$(build_dir)/%s/%%.po: %s/%%.c\n"%(dir_name, dir_name)
+            result += cc_pic.format(self.cflag_var, self.include_var)
             result += echo
         return result
 
@@ -347,7 +392,7 @@ class ContentDir(object):
 \t@set -e; rm -f $@; \\
 \techo "Making $@"; \\
 \t$(CC) -MM $({}) $(filter %.c,$^) > $@.$$$$; \\
-\tsed 's#\\($*\\)\\.o[ :]*#$(dir $@)\\1.o $@ : #g'<$@.$$$$>$@; \\
+\tsed 's#\\($*\\)\\.o[ :]*#$(dir $@)\\1.o $(dir $@)\\1.po $@ : #g'<$@.$$$$>$@;\\
 \trm -f $@.$$$$
 """
         dir_list = self.get_build_dir_list()
@@ -355,7 +400,7 @@ class ContentDir(object):
             result += "$(build_dir)/%s/%%.d: "%dir_name
             result += "%s/%%.c "%dir_name
             result += "$(build_dir)/%s/.probe"%dir_name
-            result += rule_str.format(self.include_name)
+            result += rule_str.format(self.include_var)
             result += "\n"
 
         return result
@@ -375,8 +420,8 @@ class ContentDir(object):
 
 class ContentInclude(object):
     def __init__(self, var):
-        var.set_target(True)
-        self.include_name = var.var_name
+        var.set_invisible()
+        self.include_var = var.var_name
         self.parse_includes(var.var_values)
 
     def parse_includes(self, values):
@@ -398,7 +443,7 @@ class ContentInclude(object):
             include_value = ""
 
     def make_include_str(self):
-        tag = "{} = ".format(self.include_name)
+        tag = "{} = ".format(self.include_var)
         left_margin = len(tag)
 
         result = ""
@@ -414,8 +459,8 @@ class ContentInclude(object):
 
 class ContentCflags(object):
     def __init__(self, var):
-        var.set_target(True)
-        self.cflag_name = var.var_name
+        var.set_invisible()
+        self.cflag_var = var.var_name
         self.parse_cflags(var.var_values)
         print "*"*15 + "include dirs" + "*"*15
         print self.wflags
@@ -450,7 +495,7 @@ class ContentCflags(object):
         self.sort_cflags(self.oflags)
 
     def make_cflag_str(self):
-        tag = "{} = ".format(self.cflag_name)
+        tag = "{} = ".format(self.cflag_var)
         left_margin = len(tag)
         max_char = 80
 
@@ -477,8 +522,10 @@ class ContentCflags(object):
         return result
 
 class ContentMk(object):
-    include_name = "INCLUDE_DIR"
-    cflag_name = "MK_CFLAGS"
+    build_dir_var = "build_dir"
+    install_dir_var = "install_dir"
+    include_var = "INCLUDE_DIR"
+    cflag_var = "MK_CFLAGS"
 
     def __init__(self, file_name, build_defs, cflags):
         fp = open(file_name, "r")
@@ -490,7 +537,9 @@ class ContentMk(object):
         self.parse_target(build_defs)
         self.parse_includes()
         self.parse_cflags()
-        self.parse_dir()
+        self.parse_content_dir()
+        self.parse_build_dir()
+        self.parse_install_dir()
         self.cflags.add_cflags(cflags)
 
     def preprocess_lines(self, lines):
@@ -525,12 +574,41 @@ class ContentMk(object):
             var_line = ""
             var_idx += 1
 
+        self.var_sanity_check()
+
+    def var_sanity_check(self):
+        self.var_multi_def_check()
+        self.var_mandatory_var_check()
+
+    def var_multi_def_check(self):
+        var_names = set()
+        var_multi = set()
+
+        for var in self.var_list:
+            if var.var_name in var_names:
+                var_multi.add(var.var_name)
+            else:
+                var_names.add(var.var_name)
+
+        if len(var_multi) != 0:
+            raise Exception("Multi def for var, " + str(var_multi))
+
+    def var_mandatory_var_check(self):
+        check_list = [self.build_dir_var, self.install_dir_var]
+
+        for var in self.var_list:
+            if var.var_name in check_list:
+                check_list.remove(var.var_name)
+
+        if len(check_list) != 0:
+            raise Exception("These var should be defined, " + str(check_list))
+
     def parse_target(self, build_defs):
         self.target = ContentTarget(self.var_list)
         for var in self.var_list:
             if var.var_name in build_defs:
                 self.target.add_build_target(var.var_values)
-                var.set_target(True)
+                var.set_invisible()
                 build_defs.remove(var.var_name)
 
         if len(build_defs) != 0:
@@ -541,20 +619,45 @@ class ContentMk(object):
     def parse_includes(self):
         self.includes = None
         for var in self.var_list:
-            if var.var_name == self.include_name:
+            if var.var_name == self.include_var:
                 self.includes = ContentInclude(var)
                 break
 
     def parse_cflags(self):
         self.cflags = None
         for var in self.var_list:
-            if var.var_name == self.cflag_name:
+            if var.var_name == self.cflag_var:
                 self.cflags = ContentCflags(var)
                 break
 
-    def parse_dir(self):
+    def parse_content_dir(self):
         self.content_dir = ContentDir(self.target, self.var_list,
-                                      self.include_name, self.cflag_name)
+                                      self.include_var, self.cflag_var)
+
+    def get_var_single_value(self, var_name):
+        value = []
+        for var in self.var_list:
+            if var.var_name == var_name:
+                value = var.var_values
+
+        if len(value) == 0:
+            raise Exception("Should set value for var " + var_name)
+        if len(value) > 1:
+            raise Exception("Should set single value for var " + var_name)
+
+        return value[0]
+
+    def parse_build_dir(self):
+        self.build_dir_name = self.get_var_single_value(self.build_dir_var)
+
+    def get_build_dir_name(self):
+        return self.build_dir_name
+
+    def parse_install_dir(self):
+        self.install_dir_name = self.get_var_single_value(self.install_dir_var)
+
+    def get_build_dir_name(self):
+        return self.install_dir_name
 
     def dump(self):
         print "#"*10 + " var list " + "#"*10
@@ -566,15 +669,14 @@ class ContentMk(object):
 
     def generate_makefile(self):
         makefile = ""
-        makefile += "build_dir=%s\n\n"%build_dir
         makefile += "CC=gcc\n\n"
 
         makefile += self.target.make_target_list()
-        makefile += self.content_dir.make_include_dep()
 
         for var in self.var_list:
             makefile += var.make_def_str()
 
+        makefile += self.content_dir.make_include_dep()
         makefile += self.includes.make_include_str()
         makefile += self.cflags.make_cflag_str()
 
@@ -583,8 +685,19 @@ class ContentMk(object):
         makefile += self.content_dir.make_obj_rule()
         makefile += self.content_dir.make_dep_rule()
         makefile += self.content_dir.make_mkdir_rule()
+        makefile += self.make_install()
         makefile += self.make_clean()
         return makefile
+
+    def make_install(self):
+        result = """
+.PHONY: install
+install:
+\t-mkdir $({0}); \\
+\tcp {1} $({0})
+"""
+        targets = self.target.make_target_str()
+        return result.format(self.install_dir_var, targets)
 
     def make_clean(self):
         result = """
@@ -599,7 +712,7 @@ def generate_makefile(build_defs, cflags):
     content_mk.dump()
     makefile = content_mk.generate_makefile()
     fp = open("Makefile", "w")
-    fp.write(makefile);
+    fp.write(makefile)
     fp.close()
 
 build_defs = ["ch_proc_ver", "ch_lib_ver", "gvd_proc_ver", "gvd_lib_ver"]
