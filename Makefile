@@ -1,17 +1,10 @@
 CC=gcc
 
-.PHONY: all
-all: ./build/libch-pf.so \
-     ./build/libch-notify.so \
-     ./build/libch.so \
-     ./build/ch \
-     ./build/ch_gvd \
-     ./build/gvd_proc \
-     ./build/gvd_lib
-
 build_dir = build
 
 install_dir = install
+
+gvd_lib_ver = gvd_lib
 
 PF_LDSO = -L$(build_dir) -lch-pf
 
@@ -21,6 +14,16 @@ CH_COMMON_LDSO = $(PF_LDSO) \
 ch_LDSO = $(CH_COMMON_LDSO)
 
 ch_gvd_LDSO = $(CH_COMMON_LDSO)
+
+gvd_lib = $(GVD_COMMON)
+
+.PHONY: all
+all: $(build_dir)/libch-pf.so \
+     $(build_dir)/libch-notify.so \
+     $(build_dir)/libch.so \
+     $(build_dir)/ch \
+     $(build_dir)/ch_gvd \
+     $(build_dir)/gvd_proc
 
 ifneq ($(MAKECMDGOALS), clean)
 -include $(build_dir)/core/src/ch_db.d
@@ -81,10 +84,6 @@ $(build_dir)/ch_gvd: $(build_dir)/core/src/ch_db.o \
 
 $(build_dir)/gvd_proc: $(build_dir)/gvd/gvd/gvd.o
 	$(CC) -o $@ $^ $(gvd_proc_LDSO)
-	@echo -e "\nGenerated $@\n"
-
-$(build_dir)/gvd_lib: $(build_dir)/gvd/gvd/gvd.o
-	$(CC) -o $@ $^ $(gvd_lib_LDSO)
 	@echo -e "\nGenerated $@\n"
 
 $(build_dir)/core/src/%.o: core/src/%.c
@@ -188,7 +187,7 @@ $(build_dir)/pf/src/.probe:
 .PHONY: install
 install:
 	-mkdir $(install_dir); \
-	cp ./build/libch-pf.so ./build/libch-notify.so ./build/libch.so ./build/ch ./build/ch_gvd ./build/gvd_proc ./build/gvd_lib $(install_dir)
+	cp $(build_dir)/libch-pf.so $(build_dir)/libch-notify.so $(build_dir)/libch.so $(build_dir)/ch $(build_dir)/ch_gvd $(build_dir)/gvd_proc $(install_dir)
 
 .PHONY: clean
 clean:

@@ -1,7 +1,5 @@
 import os
 
-build_dir = "./build"
-
 class ContentVar(object):
     def __init__(self, var_line, var_idx):
         print "var_line " + var_line 
@@ -43,8 +41,6 @@ class ContentVar(object):
 
     @staticmethod
     def get_ref_name(value):
-        if value[1] != "(" or value[-1] != ")":
-            raise Exception("Ref for var not valid, " + value)
         ref_name = value[2:-1] # strip $( and )
         if ref_name.lstrip(" ") == "":
             raise Exception("Ref for a var without name, " + value)
@@ -134,7 +130,7 @@ class BuildTarget(object):
                 new_values.append(one_value)
                 one_value = ""
                 flush_one_value = False
-            if value.startswith("$"):
+            if value.startswith("$") and value[-1] == ")":
                 ref_name = ContentVar.get_ref_name(value)
                 self.reload_one_ldso_var(ref_name, var_list, var_stack)
             if one_value != "":
@@ -159,14 +155,19 @@ class BuildTarget(object):
         self.target_var.set_invisible()
 
     def set_file_list(self, file_list):
-        self.file_list = file_list
+        self.file_list = []
+        for one_file in file_list:
+            one_file = one_file[:-2] # -2 for trailing .c
+            if os.path.dirname(one_file) == "":
+                one_file = "." + os.path.sep + one_file
+            self.file_list.append(one_file)
         self.file_list.sort()
 
     def dump(self):
         print self.target_name
 
     def make_target_str(self):
-        return build_dir + os.sep + self.target_name
+        return "$(build_dir)" + os.sep + self.target_name
 
     def make_target_def(self):
         tag = "$(build_dir)/%s: "%self.target_name
@@ -190,8 +191,7 @@ class BuildTarget(object):
         for one_file in self.file_list:
             if i != 0:
                 result += (" \\\n" + " "*left_margin)
-            # -2 for trailing .c
-            file_name = "$(build_dir)/" + one_file[:-2] + suffix
+            file_name = "$(build_dir)/" + one_file + suffix
             result += file_name
             i += 1
 
@@ -274,7 +274,7 @@ class ContentDir(object):
     def __init__(self, content_target, var_list, include_var, cflag_var):
         self.include_var = include_var
         self.cflag_var = cflag_var
-        self.build_dirs = {}
+        self.source_dirs = {}
         build_targets = content_target.get_build_targets()
         for build_target in build_targets:
             self.read_build_target(build_target, var_list)
@@ -288,21 +288,21 @@ class ContentDir(object):
         build_target.set_var(var)
 
         for one_file in file_list:
-            self.add_build_dir(one_file)
+            self.add_source_dir(one_file)
 
         build_target.set_file_list(file_list)
 
-    def add_build_dir(self, one_file):
+    def add_source_dir(self, one_file):
         dir_name, file_name = self.get_dir_name(one_file)
         
         file_name = file_name[:-2] # strip trailing .c
         
-        build_dir = self.build_dirs.get(dir_name)
-        if build_dir is None:
-            self.build_dirs[dir_name] = [file_name]
-        elif file_name not in build_dir:
-            build_dir.append(file_name)
-            build_dir.sort()
+        source_dir = self.source_dirs.get(dir_name)
+        if source_dir is None:
+            self.source_dirs[dir_name] = [file_name]
+        elif file_name not in source_dir:
+            source_dir.append(file_name)
+            source_dir.sort()
 
     def read_var_values(self, var_name, var_list, var_stack, file_list):
         if var_name in var_stack:
@@ -314,7 +314,7 @@ class ContentDir(object):
         var.set_invisible()
 
         for value in var.var_values:
-            if value.startswith("$") == False:
+            if value.startswith("$") == False or value[-1] != ")":
                 file_list.append(value)
                 continue
             ref_name = ContentVar.get_ref_name(value)
@@ -338,25 +338,27 @@ class ContentDir(object):
         if file_name.endswith(".c") == False:
             raise Exception("Should include .c file, " + one_file)
         dir_name = os.path.dirname(one_file)
+        if dir_name == "":
+            dir_name = "."
         return dir_name, file_name
 
-    def get_build_dir_list(self):
-        dir_list = self.build_dirs.keys()
+    def get_source_dir_list(self):
+        dir_list = self.source_dirs.keys()
         dir_list.sort()
         return dir_list
 
     def dump(self):
         print "#"*10 + " dir list " + "#"*10
-        dir_list = self.get_build_dir_list()
+        dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
             print dir_name
         print "#"*20
 
     def make_include_dep_each_dir(self, dir_name):
-        build_dir = self.build_dirs[dir_name]
+        source_dir = self.source_dirs[dir_name]
 
         result = ""
-        for file_name in build_dir:
+        for file_name in source_dir:
             result += "-include $(build_dir)/%s/%s.d\n"%(dir_name, file_name)
         return result
 
@@ -364,7 +366,7 @@ class ContentDir(object):
         result = ""
         result += "ifneq ($(MAKECMDGOALS), clean)\n"
 
-        dir_list = self.get_build_dir_list()
+        dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
             result += self.make_include_dep_each_dir(dir_name)
 
@@ -376,7 +378,7 @@ class ContentDir(object):
         cc_pic = "\t$(CC) -fPIC -o $@ $({}) $({}) -c $(filter %c,$^)\n"
         echo = "\t@echo\n\n"
         result = ""
-        dir_list = self.get_build_dir_list()
+        dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
             result += "$(build_dir)/%s/%%.o: %s/%%.c\n"%(dir_name, dir_name)
             result += cc_non_pic.format(self.cflag_var, self.include_var)
@@ -395,7 +397,7 @@ class ContentDir(object):
 \tsed 's#\\($*\\)\\.o[ :]*#$(dir $@)\\1.o $(dir $@)\\1.po $@ : #g'<$@.$$$$>$@;\\
 \trm -f $@.$$$$
 """
-        dir_list = self.get_build_dir_list()
+        dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
             result += "$(build_dir)/%s/%%.d: "%dir_name
             result += "%s/%%.c "%dir_name
@@ -409,7 +411,7 @@ class ContentDir(object):
         result = ""
 
         i = 0
-        dir_list = self.get_build_dir_list()
+        dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
             if i != 0:
                 result += " \\\n"
@@ -648,15 +650,15 @@ class ContentMk(object):
         return value[0]
 
     def parse_build_dir(self):
-        self.build_dir_name = self.get_var_single_value(self.build_dir_var)
+        self.build_dir = self.get_var_single_value(self.build_dir_var)
 
     def get_build_dir_name(self):
-        return self.build_dir_name
+        return self.build_dir
 
     def parse_install_dir(self):
         self.install_dir_name = self.get_var_single_value(self.install_dir_var)
 
-    def get_build_dir_name(self):
+    def get_install_dir_name(self):
         return self.install_dir_name
 
     def dump(self):
@@ -671,10 +673,10 @@ class ContentMk(object):
         makefile = ""
         makefile += "CC=gcc\n\n"
 
-        makefile += self.target.make_target_list()
-
         for var in self.var_list:
             makefile += var.make_def_str()
+
+        makefile += self.target.make_target_list()
 
         makefile += self.content_dir.make_include_dep()
         makefile += self.includes.make_include_str()
@@ -715,5 +717,5 @@ def generate_makefile(build_defs, cflags):
     fp.write(makefile)
     fp.close()
 
-build_defs = ["ch_proc_ver", "ch_lib_ver", "gvd_proc_ver", "gvd_lib_ver"]
+build_defs = ["ch_proc_ver", "ch_lib_ver", "gvd_proc_ver"]
 generate_makefile(build_defs, ["-g", "-D__LINUX__"])

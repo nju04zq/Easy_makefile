@@ -1,5 +1,5 @@
 # Easy_makefile
-It's always annoying for me to create Makefile on a C project, especially when the project is a large and complex one. Now we have this python script to generate makefile for linux C projects. You only have to tell it which targets you want to build and those C source files the targets relying on.
+It's always annoying me to create Makefile on a C project, especially when the project is a large and complex one. Now we have this python script to generate makefile for linux C projects. You only have to tell it which targets you want to build and those C source files the targets relying on.
 
 The build.py is the easy_makefile tool. The content.mk is an example configure file. The others are files/directories for a example project, with abbreviation as ch.
 
