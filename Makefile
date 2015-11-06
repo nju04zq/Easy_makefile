@@ -1,3 +1,6 @@
+####################################
+###Makefile generated from script###
+####################################
 CC=gcc
 
 build_dir = build

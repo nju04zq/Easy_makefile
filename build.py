@@ -671,6 +671,7 @@ class ContentMk(object):
 
     def generate_makefile(self):
         makefile = ""
+        makefile += self.make_header()
         makefile += "CC=gcc\n\n"
 
         for var in self.var_list:
@@ -690,6 +691,15 @@ class ContentMk(object):
         makefile += self.make_install()
         makefile += self.make_clean()
         return makefile
+
+    def make_header(self):
+        info = "###Makefile generated from script###"
+        result = ""
+        result += "#"*len(info)
+        result += "\n{}\n".format(info)
+        result += "#"*len(info)
+        result += "\n"
+        return result
 
     def make_install(self):
         result = """
