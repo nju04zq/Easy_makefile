@@ -2,7 +2,7 @@ import os
 
 class ContentVar(object):
     def __init__(self, var_line, var_idx):
-        print "var_line " + var_line 
+        #print "var_line " + var_line 
         token_list = var_line.split("=")
         if len(token_list) != 2:
             raise Exception("Variable def not valid, " + var_line)
@@ -10,6 +10,7 @@ class ContentVar(object):
         self.var_name = self.parse_name(token_list[0])
         self.var_values = self.parse_values(token_list[1])
         self.var_visible = True
+        self.var_is_ref = False
 
     def parse_name(self, token):
         token = token.lstrip(" ")
@@ -33,6 +34,9 @@ class ContentVar(object):
     def set_invisible(self):
         self.var_visible = False
 
+    def set_ref(self):
+        self.var_is_ref = True
+
     def get_values(self):
         return self.var_values
 
@@ -48,7 +52,7 @@ class ContentVar(object):
 
     def dump(self):
         value_str = "+++".join(self.var_values)
-        print "var %s, values %s"%(self.var_name, value_str)
+        #print "var %s, values %s"%(self.var_name, value_str)
 
     def get_obj_value(self, value):
         if value.endswith(".c"):
@@ -57,7 +61,7 @@ class ContentVar(object):
             return value
 
     def make_def_str(self):
-        if self.var_visible == False:
+        if self.var_visible == False or self.var_is_ref == False:
             return ""
 
         tag = "%s = "%self.var_name
@@ -112,9 +116,12 @@ class BuildTarget(object):
             raise Exception("Loop ref in ", "->".join(var_stack))
 
         var = self.find_ldso_var(var_name, var_list)
-        if var is None:
+        if var is None :
+            if len(var_stack) != 0:
+                raise Exception("Var %s not defined"%var_name)
             return
 
+        var.set_ref()
         var_stack.append(var.var_name)
         org_values = var.get_values()
         new_values = []
@@ -164,7 +171,8 @@ class BuildTarget(object):
         self.file_list.sort()
 
     def dump(self):
-        print self.target_name
+        #print self.target_name
+        pass
 
     def make_target_str(self):
         return "$(build_dir)" + os.sep + self.target_name
@@ -223,14 +231,22 @@ class ContentTarget(object):
     def get_build_targets(self):
         return self.build_targets
 
+    def get_build_target_names(self):
+        result = ""
+        for one_name in self.build_target_names:
+            result += one_name
+            result += " "
+        result = result.rstrip()
+        return result
+
     def sort(self):
         self.build_targets.sort(key=lambda x:x.is_bin_target())
 
     def dump(self):
-        print "#"*10 + " build targets " + "#"*10
+        #print "#"*10 + " build targets " + "#"*10
         for build_target in self.build_targets:
             build_target.dump()
-        print "#"*20
+        #print "#"*20
 
     def make_target_list(self):
         left_margin = 0
@@ -321,7 +337,7 @@ class ContentDir(object):
             ref_var = self.read_var_values(ref_name, var_list,
                                            var_stack, file_list)
             if ref_var.var_idx >= var.var_idx:
-                print ref_var.var_idx, var.var_idx
+                #print ref_var.var_idx, var.var_idx
                 raise Exception("Var %s must be defined before used"%ref_name)
 
         var_stack.pop()
@@ -348,11 +364,12 @@ class ContentDir(object):
         return dir_list
 
     def dump(self):
-        print "#"*10 + " dir list " + "#"*10
+        #print "#"*10 + " dir list " + "#"*10
         dir_list = self.get_source_dir_list()
         for dir_name in dir_list:
-            print dir_name
-        print "#"*20
+            #print dir_name
+            pass
+        #print "#"*20
 
     def make_include_dep_each_dir(self, dir_name):
         source_dir = self.source_dirs[dir_name]
@@ -464,10 +481,10 @@ class ContentCflags(object):
         var.set_invisible()
         self.cflag_var = var.var_name
         self.parse_cflags(var.var_values)
-        print "*"*15 + "include dirs" + "*"*15
-        print self.wflags
-        print self.oflags
-        print "*"*30
+        #print "*"*15 + "include dirs" + "*"*15
+        #print self.wflags
+        #print self.oflags
+        #print "*"*30
 
     def parse_cflags(self, values):
         self.wflags = [] # like -Wall
@@ -581,6 +598,7 @@ class ContentMk(object):
     def var_sanity_check(self):
         self.var_multi_def_check()
         self.var_mandatory_var_check()
+        self.var_ref_check()
 
     def var_multi_def_check(self):
         var_names = set()
@@ -596,7 +614,8 @@ class ContentMk(object):
             raise Exception("Multi def for var, " + str(var_multi))
 
     def var_mandatory_var_check(self):
-        check_list = [self.build_dir_var, self.install_dir_var]
+        check_list = [self.build_dir_var, self.install_dir_var,
+                      self.include_var, self.cflag_var]
 
         for var in self.var_list:
             if var.var_name in check_list:
@@ -604,6 +623,21 @@ class ContentMk(object):
 
         if len(check_list) != 0:
             raise Exception("These var should be defined, " + str(check_list))
+
+    def var_ref_check(self):
+        for var in self.var_list:
+            result = self.var_ref_check_one(var.var_name);
+            if result == True:
+                var.set_ref()
+
+    def var_ref_check_one(self, var_ref_name):
+        var_ref_str = "$(%s)"%var_ref_name
+        for var in self.var_list:
+            for var_value in var.var_values:
+                pos = var_value.find(var_ref_str)
+                if pos != -1:
+                    return True
+        return False
 
     def parse_target(self, build_defs):
         self.target = ContentTarget(self.var_list)
@@ -617,6 +651,9 @@ class ContentMk(object):
             raise Exception("These build defs not found, " + str(build_defs))
 
         self.target.sort()
+
+    def get_build_target_names(self):
+        return self.target.get_build_target_names()
 
     def parse_includes(self):
         self.includes = None
@@ -641,6 +678,7 @@ class ContentMk(object):
         for var in self.var_list:
             if var.var_name == var_name:
                 value = var.var_values
+                var.set_ref()
 
         if len(value) == 0:
             raise Exception("Should set value for var " + var_name)
@@ -662,10 +700,10 @@ class ContentMk(object):
         return self.install_dir_name
 
     def dump(self):
-        print "#"*10 + " var list " + "#"*10
+        #print "#"*10 + " var list " + "#"*10
         for var in self.var_list:
             var.dump()
-        print "#"*20
+        #print "#"*20
         self.target.dump()
         self.content_dir.dump()
 
@@ -705,7 +743,7 @@ class ContentMk(object):
         result = """
 .PHONY: install
 install:
-\t-mkdir $({0}); \\
+\t-mkdir -p $({0}); \\
 \tcp {1} $({0})
 """
         targets = self.target.make_target_str()

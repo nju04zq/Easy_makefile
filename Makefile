@@ -7,8 +7,6 @@ build_dir = build
 
 install_dir = install
 
-gvd_lib_ver = gvd_lib
-
 PF_LDSO = -L$(build_dir) -lch-pf
 
 CH_COMMON_LDSO = $(PF_LDSO) \
@@ -17,8 +15,6 @@ CH_COMMON_LDSO = $(PF_LDSO) \
 ch_LDSO = $(CH_COMMON_LDSO)
 
 ch_gvd_LDSO = $(CH_COMMON_LDSO)
-
-gvd_lib = $(GVD_COMMON)
 
 .PHONY: all
 all: $(build_dir)/libch-pf.so \
@@ -189,7 +185,7 @@ $(build_dir)/pf/src/.probe:
 
 .PHONY: install
 install:
-	-mkdir $(install_dir); \
+	-mkdir -p $(install_dir); \
 	cp $(build_dir)/libch-pf.so $(build_dir)/libch-notify.so $(build_dir)/libch.so $(build_dir)/ch $(build_dir)/ch_gvd $(build_dir)/gvd_proc $(install_dir)
 
 .PHONY: clean
