@@ -9,8 +9,10 @@ install_dir = install
 
 PF_LDSO = -L$(build_dir) -lch-pf
 
+LIBXML_LDSO = -L ./libxml/lib -lxml
+
 CH_COMMON_LDSO = $(PF_LDSO) \
-                 -L ../libxml/lib -lxml
+                 $(LIBXML_LDSO)
 
 ch_LDSO = $(CH_COMMON_LDSO)
 
@@ -37,8 +39,7 @@ ifneq ($(MAKECMDGOALS), clean)
 -include $(build_dir)/pf/src/ch_pf_info.d
 endif
 
-INCLUDE_DIR = -I. \
-              -I..
+INCLUDE_DIR = -I.
 
 MK_CFLAGS = -g -D__LINUX__ -Wall -Werror -Wformat -Wcomment -Wimplicit \
             -Wformat-y2k -Wdiv-by-zero -Wendif-labels -Wchar-subscripts \

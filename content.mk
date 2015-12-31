@@ -12,8 +12,7 @@ gvd_lib_ver = gvd_lib
 
 # Define include dir
 # Do not change the include dir name
-INCLUDE_DIR = -I . \
-              -I.. 
+INCLUDE_DIR = -I .
 
 # Define CFLAGS
 # Do not change the include dir name
@@ -31,8 +30,10 @@ CH_COMMON = $(UTIL) \
 
 PF_LDSO = -L$(build_dir) -lch-pf
 
+LIBXML_LDSO = -L ./libxml/lib -lxml
+
 CH_COMMON_LDSO = $(PF_LDSO) \
-                 -L ../libxml/lib -lxml
+                 $(LIBXML_LDSO)
 
 ch = $(CH_COMMON) \
      main/src/ch_gvd_dummy.c \
