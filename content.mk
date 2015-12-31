@@ -24,7 +24,7 @@ MK_CFLAGS = -Wall -Werror \
             -Wbad-function-cast -Wchar-subscripts -Wcomment \
             -Wdeprecated-declarations -Wdisabled-optimization -Wdiv-by-zero \
             -Wendif-labels -Wformat -Wformat-extra-args \
-            -Wformat-y2k -Wimplicit -Wimplicit-function-declaration \
+            -Wformat-y2k -Wimplicit -Wimplicit-function-declaration
 
 UTIL = core/src/ch_util.c
 
