@@ -5,6 +5,10 @@ build_dir = build
 install_dir = install
 
 # Do not change the following target var name
+# If you need to customize these names, remeber to change those
+# ones in build.py at the same time.
+# Search for build_defs in build.py, that's the only place
+# these names are used.
 ch_proc_ver = ch libch-pf.so libch-notify.so
 ch_lib_ver = libch.so libch-pf.so
 gvd_proc_ver = ch_gvd gvd_proc
